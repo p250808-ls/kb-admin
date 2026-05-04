@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+﻿import { useState, useEffect, useCallback, useRef } from 'react'
 
 // ── 預設值 ────────────────────────────────────────────────
 const CONN_DEFAULTS = {
@@ -523,6 +523,9 @@ export default function App() {
                       檔名：{uploadResult.filename}<br />
                       自動分類：{uploadResult.workspace_tags?.join(', ')}<br />
                       Chunks：{uploadResult.chunks_count}　Doc ID：{uploadResult.doc_id}
+                      {uploadResult.parse_method && (
+                        <><br />解析方式：<Badge color={uploadResult.parse_method === 'mistral-ocr' ? 'purple' : 'gray'}>{uploadResult.parse_method}</Badge></>
+                      )}
                     </InfoBox>
                   </div>
                 )}
@@ -811,3 +814,4 @@ export default function App() {
     </div>
   )
 }
+
