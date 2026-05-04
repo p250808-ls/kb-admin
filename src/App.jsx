@@ -280,10 +280,9 @@ export default function App() {
   const handleUpload = async () => {
     if (!uploadFile) return
 
-    // 前端大小檢查
-    const sizeMb = uploadFile.size / (1024 * 1024)
-    if (sizeMb > 50) {
-      setUploadError(`檔案 ${sizeMb.toFixed(1)}MB 超過上限 50MB，建議拆分後分批上傳`)
+    const MAX_SIZE = 50 * 1024 * 1024
+    if (uploadFile.size > MAX_SIZE) {
+      setUploadError(`檔案 ${(uploadFile.size/1024/1024).toFixed(1)}MB 超過上限 50MB，建議拆分後分批上傳`)
       return
     }
 
@@ -300,8 +299,12 @@ export default function App() {
       fd.append('embed_model', ai.embedModel)
       if (ai.embedApiKey) fd.append('embed_api_key', ai.embedApiKey)
       const r = await fetch(`${conn.kbUrl}/ingest`, { method: 'POST', body: fd })
-      const d = await r.json()
-      if (!r.ok) throw new Error(d.detail || d.message || JSON.stringify(d))
+      let d
+      try { d = await r.json() } catch { d = {} }
+      if (!r.ok) {
+        const msg = d?.detail || d?.message || d?.error || `上傳失敗（HTTP ${r.status}）`
+        throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg))
+      }
       if (d.job_id) {
         setJobStatus({ job_id: d.job_id, status: 'queued', progress: 0, filename: uploadFile.name })
         startPolling(d.job_id)
@@ -311,7 +314,9 @@ export default function App() {
       }
       setUploadFile(null)
       if (fileRef.current) fileRef.current.value = ''
-    } catch (e) { setUploadError(e?.message || e?.detail || String(e) || '上傳失敗') }
+    } catch (e) {
+      setUploadError(typeof e?.message === 'string' ? e.message : String(e))
+    }
     setUploadLoading(false)
   }
 
