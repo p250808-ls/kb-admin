@@ -301,7 +301,7 @@ export default function App() {
       if (ai.embedApiKey) fd.append('embed_api_key', ai.embedApiKey)
       const r = await fetch(`${conn.kbUrl}/ingest`, { method: 'POST', body: fd })
       const d = await r.json()
-      if (!r.ok) throw new Error(d.detail || JSON.stringify(d))
+      if (!r.ok) throw new Error(d.detail || d.message || JSON.stringify(d))
       if (d.job_id) {
         setJobStatus({ job_id: d.job_id, status: 'queued', progress: 0, filename: uploadFile.name })
         startPolling(d.job_id)
@@ -311,7 +311,7 @@ export default function App() {
       }
       setUploadFile(null)
       if (fileRef.current) fileRef.current.value = ''
-    } catch (e) { setUploadError(e.message) }
+    } catch (e) { setUploadError(e?.message || e?.detail || String(e) || '上傳失敗') }
     setUploadLoading(false)
   }
 
@@ -335,7 +335,7 @@ export default function App() {
         body: JSON.stringify(body),
       })
       const d = await r.json()
-      if (!r.ok) throw new Error(d.detail || JSON.stringify(d))
+      if (!r.ok) throw new Error(d.detail || d.message || JSON.stringify(d))
       setQueryResult(d)
     } catch (e) { setQueryError(e.message) }
     setQueryLoading(false)
