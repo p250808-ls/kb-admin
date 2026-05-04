@@ -1,0 +1,43 @@
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: #09090b;
+  color: #e4e4e7;
+  font-family: 'IBM Plex Mono', 'Noto Sans TC', monospace;
+  font-size: 14px;
+  min-height: 100vh;
+}
+
+input, textarea, select {
+  background: #27272a;
+  border: 1px solid #3f3f46;
+  color: #e4e4e7;
+  border-radius: 8px;
+  padding: 7px 12px;
+  width: 100%;
+  font-size: 12px;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.15s;
+}
+input:focus, textarea:focus, select:focus { border-color: #10b981; }
+input[type="file"] { padding: 5px; cursor: pointer; }
+
+pre { white-space: pre-wrap; word-break: break-all; }
+
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: #18181b; }
+::-webkit-scrollbar-thumb { background: #3f3f46; border-radius: 3px; }
+
+@keyframes spin { to { transform: rotate(360deg); } }
+.spinner {
+  display: inline-block;
+  width: 13px; height: 13px;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+.pulse { animation: pulse 2s ease-in-out infinite; }
