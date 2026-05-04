@@ -38,8 +38,8 @@ const AI_DEFAULTS = {
 }
 
 const RAG_DEFAULTS = {
-  chunkSize: 1200,
-  chunkOverlap: 240,
+  chunkSize: 1500,
+  chunkOverlap: 200,
   maxEmbedLength: 2048,
   temperature: 0.3,
   maxContextSnippets: 4,
@@ -188,6 +188,8 @@ export default function App() {
   const [uploadResult, setUploadResult] = useState(null)
   const [uploadLoading, setUploadLoading] = useState(false)
   const [uploadError, setUploadError] = useState('')
+  const [jobStatus, setJobStatus] = useState(null)
+  const pollIntervalRef = useRef(null)
   const fileRef = useRef()
 
   // query
@@ -251,9 +253,42 @@ export default function App() {
     if (tab === 'docs') { fetchDocs(); fetchStats() }
   }, [tab]) // eslint-disable-line
 
+  useEffect(() => { return () => stopPolling() }, []) // eslint-disable-line
+
+  const stopPolling = () => {
+    if (pollIntervalRef.current) {
+      clearInterval(pollIntervalRef.current)
+      pollIntervalRef.current = null
+    }
+  }
+
+  const startPolling = (jobId) => {
+    stopPolling()
+    pollIntervalRef.current = setInterval(async () => {
+      try {
+        const r = await fetch(`${conn.kbUrl}/job/${jobId}`)
+        const d = await r.json()
+        setJobStatus(d)
+        if (d.status === 'done' || d.status === 'failed') {
+          stopPolling()
+          if (d.status === 'done') { fetchStats(); fetchDocs() }
+        }
+      } catch { /* ignore poll errors */ }
+    }, 3000)
+  }
+
   const handleUpload = async () => {
     if (!uploadFile) return
-    setUploadLoading(true); setUploadError(''); setUploadResult(null)
+
+    // 前端大小檢查
+    const sizeMb = uploadFile.size / (1024 * 1024)
+    if (sizeMb > 50) {
+      setUploadError(`檔案 ${sizeMb.toFixed(1)}MB 超過上限 50MB，建議拆分後分批上傳`)
+      return
+    }
+
+    stopPolling()
+    setUploadLoading(true); setUploadError(''); setUploadResult(null); setJobStatus(null)
     try {
       const fd = new FormData()
       fd.append('file', uploadFile)
@@ -267,10 +302,15 @@ export default function App() {
       const r = await fetch(`${conn.kbUrl}/ingest`, { method: 'POST', body: fd })
       const d = await r.json()
       if (!r.ok) throw new Error(d.detail || JSON.stringify(d))
-      setUploadResult(d)
+      if (d.job_id) {
+        setJobStatus({ job_id: d.job_id, status: 'queued', progress: 0, filename: uploadFile.name })
+        startPolling(d.job_id)
+      } else {
+        setUploadResult(d)
+        fetchStats(); fetchDocs()
+      }
       setUploadFile(null)
       if (fileRef.current) fileRef.current.value = ''
-      fetchStats(); fetchDocs()
     } catch (e) { setUploadError(e.message) }
     setUploadLoading(false)
   }
@@ -523,10 +563,40 @@ export default function App() {
                       檔名：{uploadResult.filename}<br />
                       自動分類：{uploadResult.workspace_tags?.join(', ')}<br />
                       Chunks：{uploadResult.chunks_count}　Doc ID：{uploadResult.doc_id}
-                      {uploadResult.parse_method && (
-                        <><br />解析方式：<Badge color={uploadResult.parse_method === 'mistral-ocr' ? 'purple' : 'gray'}>{uploadResult.parse_method}</Badge></>
-                      )}
                     </InfoBox>
+                  </div>
+                )}
+                {jobStatus && (
+                  <div style={{ marginTop: 10, background: '#18181b', border: '1px solid #3f3f46', borderRadius: 8, padding: '12px 14px' }}>
+                    {jobStatus.status === 'failed' ? (
+                      <InfoBox color="red">❌ 處理失敗：{jobStatus.error_message}</InfoBox>
+                    ) : jobStatus.status === 'done' ? (
+                      <InfoBox color="green">
+                        <div style={{ fontWeight: 700, marginBottom: 4 }}>✅ 處理完成</div>
+                        檔名：{jobStatus.filename}<br />
+                        自動分類：{jobStatus.workspace_tags?.join(', ')}<br />
+                        Chunks：{jobStatus.chunks_count}　Doc ID：{jobStatus.job_id}
+                      </InfoBox>
+                    ) : (
+                      <>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                          <Spinner />
+                          <span style={{ fontSize: 12, color: '#a1a1aa' }}>
+                            {jobStatus.status === 'queued' ? '等待處理中...' : `處理中 ${jobStatus.progress}%`}
+                          </span>
+                          <span style={{ fontSize: 10, color: '#52525b', marginLeft: 'auto' }}>Job ID：{jobStatus.job_id}</span>
+                        </div>
+                        <div style={{ fontSize: 11, color: '#71717a', marginBottom: 8 }}>{jobStatus.filename}</div>
+                        <div style={{ height: 6, background: '#27272a', borderRadius: 3, overflow: 'hidden' }}>
+                          <div style={{
+                            height: '100%', borderRadius: 3,
+                            width: `${jobStatus.progress || 0}%`,
+                            background: jobStatus.status === 'failed' ? '#f87171' : '#10b981',
+                            transition: 'width 0.6s ease',
+                          }} />
+                        </div>
+                      </>
+                    )}
                   </div>
                 )}
               </Card>
