@@ -241,7 +241,7 @@ export default function App() {
     setDocsLoading(true)
     try {
       const h = { apikey: conn.supabaseKey, Authorization: `Bearer ${conn.supabaseKey}`, 'Accept-Profile': 'kb' }
-      const r = await fetch(`${conn.supabaseUrl}/rest/v1/document_index?select=*&order=created_at.desc`, { headers: h })
+      const r = await fetch(`${conn.supabaseUrl}/rest/v1/document_index?select=*&order=uploaded_at.desc`, { headers: h })
       const d = await r.json()
       setDocs(Array.isArray(d) ? d : [])
     } catch { setDocs([]) }
@@ -637,7 +637,7 @@ export default function App() {
                               </div>
                             </td>
                             <td style={{ padding: '7px 10px 7px 0' }}><Badge color={d.status === 'active' ? 'green' : 'gray'}>{d.status}</Badge></td>
-                            <td style={{ padding: '7px 0', color: '#52525b' }}>{d.created_at ? new Date(d.created_at).toLocaleDateString('zh-TW') : '—'}</td>
+                            <td style={{ padding: '7px 0', color: '#52525b' }}>{d.uploaded_at ? new Date(d.uploaded_at).toLocaleDateString('zh-TW') : '—'}</td>
                           </tr>
                         ))}
                       </tbody>
