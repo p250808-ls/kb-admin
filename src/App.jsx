@@ -239,7 +239,7 @@ export default function App() {
     setDocsLoading(true)
     try {
       const h = { apikey: conn.supabaseKey, Authorization: `Bearer ${conn.supabaseKey}`, 'Accept-Profile': 'kb' }
-      const r = await fetch(`${conn.supabaseUrl}/rest/v1/document_index?select=*&order=created_at.desc`, { headers: h })
+      const r = await fetch(`${conn.supabaseUrl}/rest/v1/document_index?select=id,file_name,target_workspaces,status,uploaded_at,chunks_count&order=uploaded_at.desc`, { headers: h })
       const d = await r.json()
       setDocs(Array.isArray(d) ? d : [])
     } catch { setDocs([]) }
@@ -552,14 +552,14 @@ export default function App() {
                         {docs.map(d => (
                           <tr key={d.id} style={{ borderBottom: '1px solid rgba(39,39,42,0.5)' }}>
                             <td style={{ padding: '7px 10px 7px 0', color: '#52525b', ...s.mono }}>{d.id}</td>
-                            <td style={{ padding: '7px 10px 7px 0', color: '#e4e4e7', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.filename}</td>
+                            <td style={{ padding: '7px 10px 7px 0', color: '#e4e4e7', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.file_name}</td>
                             <td style={{ padding: '7px 10px 7px 0' }}>
                               <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
                                 {((() => { try { return JSON.parse(d.target_workspaces || '[]') } catch { return [] } })()).map(t => <Badge key={t} color="blue">{t}</Badge>)}
                               </div>
                             </td>
                             <td style={{ padding: '7px 10px 7px 0' }}><Badge color={d.status === 'done' ? 'green' : 'gray'}>{d.status}</Badge></td>
-                            <td style={{ padding: '7px 0', color: '#52525b' }}>{d.created_at ? new Date(d.created_at).toLocaleDateString('zh-TW') : '—'}</td>
+                            <td style={{ padding: '7px 0', color: '#52525b' }}>{d.uploaded_at ? new Date(d.uploaded_at).toLocaleDateString('zh-TW') : '—'}</td>
                           </tr>
                         ))}
                       </tbody>
