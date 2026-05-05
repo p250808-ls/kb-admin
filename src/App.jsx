@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 
 // ── 預設值 ────────────────────────────────────────────────
 const CONN_DEFAULTS = {
@@ -38,8 +38,8 @@ const AI_DEFAULTS = {
 }
 
 const RAG_DEFAULTS = {
-  chunkSize: 1500,
-  chunkOverlap: 200,
+  chunkSize: 1200,
+  chunkOverlap: 240,
   maxEmbedLength: 2048,
   temperature: 0.3,
   maxContextSnippets: 4,
@@ -188,8 +188,6 @@ export default function App() {
   const [uploadResult, setUploadResult] = useState(null)
   const [uploadLoading, setUploadLoading] = useState(false)
   const [uploadError, setUploadError] = useState('')
-  const [jobStatus, setJobStatus] = useState(null)
-  const pollIntervalRef = useRef(null)
   const fileRef = useRef()
 
   // query
@@ -221,7 +219,7 @@ export default function App() {
       const r1 = await fetch(`${conn.supabaseUrl}/rest/v1/document_index?select=id,status`, { headers: h })
       const docs = await r1.json()
       const totalDocs = Array.isArray(docs) ? docs.length : 0
-      const activeDocs = Array.isArray(docs) ? docs.filter(d => d.status === 'active').length : 0
+      const activeDocs = Array.isArray(docs) ? docs.filter(d => d.status === 'done').length : 0
 
       // chunk 數（用 HEAD + content-range）
       const r2 = await fetch(
@@ -241,7 +239,7 @@ export default function App() {
     setDocsLoading(true)
     try {
       const h = { apikey: conn.supabaseKey, Authorization: `Bearer ${conn.supabaseKey}`, 'Accept-Profile': 'kb' }
-      const r = await fetch(`${conn.supabaseUrl}/rest/v1/document_index?select=*&order=uploaded_at.desc`, { headers: h })
+      const r = await fetch(`${conn.supabaseUrl}/rest/v1/document_index?select=*&order=created_at.desc`, { headers: h })
       const d = await r.json()
       setDocs(Array.isArray(d) ? d : [])
     } catch { setDocs([]) }
@@ -253,41 +251,9 @@ export default function App() {
     if (tab === 'docs') { fetchDocs(); fetchStats() }
   }, [tab]) // eslint-disable-line
 
-  useEffect(() => { return () => stopPolling() }, []) // eslint-disable-line
-
-  const stopPolling = () => {
-    if (pollIntervalRef.current) {
-      clearInterval(pollIntervalRef.current)
-      pollIntervalRef.current = null
-    }
-  }
-
-  const startPolling = (jobId) => {
-    stopPolling()
-    pollIntervalRef.current = setInterval(async () => {
-      try {
-        const r = await fetch(`${conn.kbUrl}/job/${jobId}`)
-        const d = await r.json()
-        setJobStatus(d)
-        if (d.status === 'done' || d.status === 'failed') {
-          stopPolling()
-          if (d.status === 'done') { fetchStats(); fetchDocs() }
-        }
-      } catch { /* ignore poll errors */ }
-    }, 3000)
-  }
-
   const handleUpload = async () => {
     if (!uploadFile) return
-
-    const MAX_SIZE = 50 * 1024 * 1024
-    if (uploadFile.size > MAX_SIZE) {
-      setUploadError(`檔案 ${(uploadFile.size/1024/1024).toFixed(1)}MB 超過上限 50MB，建議拆分後分批上傳`)
-      return
-    }
-
-    stopPolling()
-    setUploadLoading(true); setUploadError(''); setUploadResult(null); setJobStatus(null)
+    setUploadLoading(true); setUploadError(''); setUploadResult(null)
     try {
       const fd = new FormData()
       fd.append('file', uploadFile)
@@ -299,24 +265,13 @@ export default function App() {
       fd.append('embed_model', ai.embedModel)
       if (ai.embedApiKey) fd.append('embed_api_key', ai.embedApiKey)
       const r = await fetch(`${conn.kbUrl}/ingest`, { method: 'POST', body: fd })
-      let d
-      try { d = await r.json() } catch { d = {} }
-      if (!r.ok) {
-        const msg = d?.detail || d?.message || d?.error || `上傳失敗（HTTP ${r.status}）`
-        throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg))
-      }
-      if (d.job_id) {
-        setJobStatus({ job_id: d.job_id, status: 'queued', progress: 0, filename: uploadFile.name })
-        startPolling(d.job_id)
-      } else {
-        setUploadResult(d)
-        fetchStats(); fetchDocs()
-      }
+      const d = await r.json()
+      if (!r.ok) throw new Error(d.detail || JSON.stringify(d))
+      setUploadResult(d)
       setUploadFile(null)
       if (fileRef.current) fileRef.current.value = ''
-    } catch (e) {
-      setUploadError(typeof e?.message === 'string' ? e.message : String(e))
-    }
+      fetchStats(); fetchDocs()
+    } catch (e) { setUploadError(e.message) }
     setUploadLoading(false)
   }
 
@@ -340,7 +295,7 @@ export default function App() {
         body: JSON.stringify(body),
       })
       const d = await r.json()
-      if (!r.ok) throw new Error(d.detail || d.message || JSON.stringify(d))
+      if (!r.ok) throw new Error(d.detail || JSON.stringify(d))
       setQueryResult(d)
     } catch (e) { setQueryError(e.message) }
     setQueryLoading(false)
@@ -571,39 +526,6 @@ export default function App() {
                     </InfoBox>
                   </div>
                 )}
-                {jobStatus && (
-                  <div style={{ marginTop: 10, background: '#18181b', border: '1px solid #3f3f46', borderRadius: 8, padding: '12px 14px' }}>
-                    {jobStatus.status === 'failed' ? (
-                      <InfoBox color="red">❌ 處理失敗：{jobStatus.error_message}</InfoBox>
-                    ) : jobStatus.status === 'done' ? (
-                      <InfoBox color="green">
-                        <div style={{ fontWeight: 700, marginBottom: 4 }}>✅ 處理完成</div>
-                        檔名：{jobStatus.filename}<br />
-                        自動分類：{jobStatus.workspace_tags?.join(', ')}<br />
-                        Chunks：{jobStatus.chunks_count}　Doc ID：{jobStatus.job_id}
-                      </InfoBox>
-                    ) : (
-                      <>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                          <Spinner />
-                          <span style={{ fontSize: 12, color: '#a1a1aa' }}>
-                            {jobStatus.status === 'queued' ? '等待處理中...' : `處理中 ${jobStatus.progress}%`}
-                          </span>
-                          <span style={{ fontSize: 10, color: '#52525b', marginLeft: 'auto' }}>Job ID：{jobStatus.job_id}</span>
-                        </div>
-                        <div style={{ fontSize: 11, color: '#71717a', marginBottom: 8 }}>{jobStatus.filename}</div>
-                        <div style={{ height: 6, background: '#27272a', borderRadius: 3, overflow: 'hidden' }}>
-                          <div style={{
-                            height: '100%', borderRadius: 3,
-                            width: `${jobStatus.progress || 0}%`,
-                            background: jobStatus.status === 'failed' ? '#f87171' : '#10b981',
-                            transition: 'width 0.6s ease',
-                          }} />
-                        </div>
-                      </>
-                    )}
-                  </div>
-                )}
               </Card>
 
               <Card>
@@ -633,11 +555,11 @@ export default function App() {
                             <td style={{ padding: '7px 10px 7px 0', color: '#e4e4e7', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.filename}</td>
                             <td style={{ padding: '7px 10px 7px 0' }}>
                               <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
-                                {(d.workspace_tags || []).map(t => <Badge key={t} color="blue">{t}</Badge>)}
+                                {((() => { try { return JSON.parse(d.target_workspaces || '[]') } catch { return [] } })()).map(t => <Badge key={t} color="blue">{t}</Badge>)}
                               </div>
                             </td>
-                            <td style={{ padding: '7px 10px 7px 0' }}><Badge color={d.status === 'active' ? 'green' : 'gray'}>{d.status}</Badge></td>
-                            <td style={{ padding: '7px 0', color: '#52525b' }}>{d.uploaded_at ? new Date(d.uploaded_at).toLocaleDateString('zh-TW') : '—'}</td>
+                            <td style={{ padding: '7px 10px 7px 0' }}><Badge color={d.status === 'done' ? 'green' : 'gray'}>{d.status}</Badge></td>
+                            <td style={{ padding: '7px 0', color: '#52525b' }}>{d.created_at ? new Date(d.created_at).toLocaleDateString('zh-TW') : '—'}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -889,4 +811,3 @@ export default function App() {
     </div>
   )
 }
-
